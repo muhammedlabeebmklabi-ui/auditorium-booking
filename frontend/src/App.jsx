@@ -1,68 +1,50 @@
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 
+const API_BASE_URL = 'http://127.0.0.1:8000/api';
+
+const AUDITORIUM_DATA = {
+  "Metro Grand 1": { rent: 30000, acRate: 2000 },
+  "Metro Grand 2": { rent: 60000, acRate: 3000 },
+  "Metro Grand 2 (Dining Area Only)": { rent: 20000, acRate: 1500 },
+  "Parking Area": { rent: 15000, acRate: 0 },
+  "Metro Grand 3": { rent: 40000, acRate: 2500 }
+};
+
+const MONTHS = [
+  "January", "February", "March", "April", "May", "June",
+  "July", "August", "September", "October", "November", "December"
+];
+
 function App() {
-  const [auditorium, setAuditorium] = useState('Metro Grand 1');
-  const [date, setDate] = useState('');
-  const [selectedBookingId, setSelectedBookingId] = useState(null);
-
-  // Staff Management State
-  const [staffList, setStaffList] = useState(['Staff 1', 'Staff 2', 'Manager']);
-  const [newStaffName, setNewStaffName] = useState('');
-  const [selectedStaff, setSelectedStaff] = useState('');
-
-  // Customer Info
-  const [customerName, setCustomerName] = useState('');
-  const [address, setAddress] = useState('');
-  const [mobileNumber, setMobileNumber] = useState('');
-  const [altMobileNumber, setAltMobileNumber] = useState('');
-
-  // Event Details
-  const [guestCount, setGuestCount] = useState('');
-  const [startTime, setStartTime] = useState('09:00');
-  const [endTime, setEndTime] = useState('15:00');
-
-  // Payment Calculation
-  const [hallRent, setHallRent] = useState(30000);
-  const [acHours, setAcHours] = useState(0);
-  const [acCharge, setAcCharge] = useState(0);
-  const [cleaningCharge, setCleaningCharge] = useState(3000);
-  const [securityCount, setSecurityCount] = useState(0);
-  const [securityCharge, setSecurityCharge] = useState(0);
-  const [advanceReceived, setAdvanceReceived] = useState(0);
-  const [totalAmount, setTotalAmount] = useState(0);
-  const [balanceAmount, setBalanceAmount] = useState(0);
-
-  // Remarks & Status
-  const [remarks, setRemarks] = useState('');
-  const [status, setStatus] = useState('confirmed');
-
+  const [activeTab, setActiveTab] = useState('calendar');
+  const [theme, setTheme] = useState('dark');
   const [bookings, setBookings] = useState([]);
-  const [currentDate, setCurrentDate] = useState(new Date());
-  const [message, setMessage] = useState('');
-  const [showBookingModal, setShowBookingModal] = useState(false);
+  
+  const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
+  const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth());
 
-  const auditoriumList = [
-    'Metro Grand 1',
-    'Metro Grand 2',
-    'Metro Grand 3',
-    'Metro Grand 2 - Dining Area Only',
-    'Dormitory Hall'
-  ];
-
-  const monthNames = [
-    'January', 'February', 'March', 'April', 'May', 'June',
-    'July', 'August', 'September', 'October', 'November', 'December'
-  ];
-
-  const yearList = Array.from({ length: 12 }, (_, i) => 2024 + i);
+  const [formData, setFormData] = useState({
+    auditorium: "Metro Grand 1",
+    bookingDate: '',
+    startTime: '09:00',
+    endTime: '15:00',
+    clientName: '',
+    clientAddress: '',
+    contactNumber: '',
+    baseRent: 30000,
+    rentDiscount: 0,
+    includeAC: true,
+    acCharge: 2000,
+    status: 'confirmed'
+  });
 
   const fetchBookings = async () => {
     try {
-      const response = await axios.get('http://127.0.0.1:8000/bookings');
-      setBookings(response.data);
-    } catch (error) {
-      console.error('Failed to fetch bookings', error);
+      const res = await axios.get(`${API_BASE_URL}/bookings`);
+      setBookings(res.data);
+    } catch (err) {
+      console.error("Fetch Error:", err);
     }
   };
 
@@ -70,409 +52,252 @@ function App() {
     fetchBookings();
   }, []);
 
-  const handleAddStaff = (e) => {
-    e.preventDefault();
-    if (newStaffName.trim() && !staffList.includes(newStaffName.trim())) {
-      setStaffList([...staffList, newStaffName.trim()]);
-      setNewStaffName('');
-    }
+  const toggleTheme = () => setTheme(prev => prev === 'dark' ? 'light' : 'dark');
+
+  const handleAuditoriumChange = (e) => {
+    const selectedAud = e.target.value;
+    const audInfo = AUDITORIUM_DATA[selectedAud] || AUDITORIUM_DATA["Metro Grand 1"];
+    setFormData({
+      ...formData,
+      auditorium: selectedAud,
+      baseRent: audInfo.rent,
+      acCharge: audInfo.acRate
+    });
   };
 
-  const handleDeleteStaff = (nameToDelete) => {
-    if (staffList.length <= 1) {
-      alert('At least one staff member is required!');
-      return;
-    }
-    setStaffList(staffList.filter((staff) => staff !== nameToDelete));
-  };
+  const finalRent = Math.max(0, Number(formData.baseRent) - Number(formData.rentDiscount));
+  const totalPayable = finalRent + (formData.includeAC ? Number(formData.acCharge) : 0);
 
-  useEffect(() => {
-    if (auditorium === 'Metro Grand 1') setHallRent(30000);
-    else if (auditorium === 'Metro Grand 2') setHallRent(60000);
-    else setHallRent(0);
-
-    if (auditorium !== 'Metro Grand 2' && auditorium !== 'Metro Grand 3') {
-      setSecurityCount(0);
-    }
-  }, [auditorium]);
-
-  useEffect(() => {
-    setAcCharge(Number(acHours) * 3000);
-  }, [acHours]);
-
-  useEffect(() => {
-    setSecurityCharge(securityCount * 1200);
-  }, [securityCount]);
-
-  useEffect(() => {
-    const total = Number(hallRent) + Number(acCharge) + Number(cleaningCharge) + Number(securityCharge);
-    setTotalAmount(total);
-    setBalanceAmount(total - Number(advanceReceived));
-  }, [hallRent, acCharge, cleaningCharge, securityCharge, advanceReceived]);
-
-  const handleBookingSubmit = async (e) => {
+  const handleSaveBooking = async (e) => {
     e.preventDefault();
+
+    const formattedNotes = `Name: ${formData.clientName} | Address: ${formData.clientAddress} | Phone: ${formData.contactNumber} | Base Rent: ₹${formData.baseRent} | Discount: ₹${formData.rentDiscount} | Net Rent: ₹${finalRent} | AC Charges: ₹${formData.includeAC ? formData.acCharge : 0} | Total Amount: ₹${totalPayable}`;
+
+    const payload = {
+      auditorium: formData.auditorium,
+      booking_date: formData.bookingDate,
+      time: `${formData.startTime} to ${formData.endTime}`,
+      notes: formattedNotes,
+      status: formData.status
+    };
+
     try {
-      const timeSlotStr = `${startTime} to ${endTime}`;
-      const customerInfoStr = `Staff: ${selectedStaff || staffList[0]} | Customer: ${customerName} | Phone: ${mobileNumber} ${altMobileNumber ? `(Alt: ${altMobileNumber})` : ''} | Address: ${address}`;
-      const amountDetailsStr = `Total: ₹${totalAmount} | Advance Recd: ₹${advanceReceived} | Balance: ₹${balanceAmount} (Rent: ₹${hallRent}, AC: ₹${acCharge} [${acHours} hrs], Clean: ₹${cleaningCharge}, Security: ₹${securityCharge})`;
-      const fullNotes = `${customerInfoStr} | Guests: ${guestCount || 'N/A'} | Time: ${timeSlotStr} | ${amountDetailsStr} | Remarks: ${remarks || 'None'}`;
-
-      const payload = {
-        auditorium,
-        date,
-        time: timeSlotStr,
-        notes: fullNotes,
-        status
-      };
-
-      if (selectedBookingId) {
-        await axios.delete(`http://127.0.0.1:8000/bookings/${selectedBookingId}`);
-        await axios.post('http://127.0.0.1:8000/bookings', payload);
-        setMessage('Booking updated successfully!');
-      } else {
-        await axios.post('http://127.0.0.1:8000/bookings', payload);
-        setMessage('Booking saved successfully!');
-      }
-
-      setShowBookingModal(false);
-      resetForm();
+      await axios.post(`${API_BASE_URL}/bookings`, payload);
+      alert("Booking Saved Successfully!");
+      setActiveTab('calendar');
       fetchBookings();
-    } catch (error) {
-      console.error(error);
-      setMessage('Failed to save/update booking!');
+    } catch (err) {
+      alert("Failed to save booking. Please check server connection.");
     }
   };
-
-  const handleDeleteBooking = async (id, e) => {
-    if (e) e.stopPropagation();
-    if (!id) return;
-    if (window.confirm('Are you sure you want to delete this booking/enquiry?')) {
-      try {
-        await axios.delete(`http://127.0.0.1:8000/bookings/${id}`);
-        setMessage('Booking deleted successfully!');
-        setShowBookingModal(false);
-        resetForm();
-        fetchBookings();
-      } catch (error) {
-        setMessage('Failed to delete booking!');
-      }
-    }
-  };
-
-  const resetForm = () => {
-    setSelectedBookingId(null);
-    setAuditorium('Metro Grand 1');
-    setSelectedStaff(staffList[0] || '');
-    setCustomerName('');
-    setAddress('');
-    setMobileNumber('');
-    setAltMobileNumber('');
-    setGuestCount('');
-    setStartTime('09:00');
-    setEndTime('15:00');
-    setHallRent(30000);
-    setAcHours(0);
-    setCleaningCharge(3000);
-    setSecurityCount(0);
-    setAdvanceReceived(0);
-    setRemarks('');
-    setStatus('confirmed');
-  };
-
-  const openBookingDetails = (booking) => {
-    setSelectedBookingId(booking.id);
-    setDate(booking.date);
-    setAuditorium(booking.auditorium || 'Metro Grand 1');
-    setStatus(booking.status || 'confirmed');
-    setShowBookingModal(true);
-  };
-
-  const year = currentDate.getFullYear();
-  const month = currentDate.getMonth();
-  const daysInMonth = new Date(year, month + 1, 0).getDate();
-  const firstDayIndex = new Date(year, month, 1).getDay();
-
-  const daysArray = [];
-  for (let i = 0; i < firstDayIndex; i++) daysArray.push(null);
-  for (let d = 1; d <= daysInMonth; d++) daysArray.push(d);
-
-  const getBookingForDate = (dateStr) => bookings.find((b) => b.date === dateStr);
 
   const handleDateClick = (day) => {
-    const formattedDate = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-    setDate(formattedDate);
-    const existing = getBookingForDate(formattedDate);
+    const month = String(selectedMonth + 1).padStart(2, '0');
+    const formattedDay = String(day).padStart(2, '0');
+    const dateStr = `${selectedYear}-${month}-${formattedDay}`;
     
-    if (existing) {
-      openBookingDetails(existing);
-    } else {
-      resetForm();
-      setShowBookingModal(true);
-    }
+    const currentAudInfo = AUDITORIUM_DATA[formData.auditorium];
+
+    setFormData({
+      auditorium: formData.auditorium,
+      bookingDate: dateStr,
+      startTime: '09:00',
+      endTime: '15:00',
+      clientName: '',
+      clientAddress: '',
+      contactNumber: '',
+      baseRent: currentAudInfo.rent,
+      rentDiscount: 0,
+      includeAC: true,
+      acCharge: currentAudInfo.acRate,
+      status: 'confirmed'
+    });
+    setActiveTab('booking_form');
   };
 
-  const handleMonthChange = (e) => {
-    setCurrentDate(new Date(year, Number(e.target.value), 1));
+  const getStatusForDate = (day) => {
+    const month = String(selectedMonth + 1).padStart(2, '0');
+    const formattedDay = String(day).padStart(2, '0');
+    const dateStr = `${selectedYear}-${month}-${formattedDay}`;
+
+    const match = bookings.find(b => (b.booking_date || b.date) === dateStr);
+    return match ? match.status : null;
   };
 
-  const handleYearChange = (e) => {
-    setCurrentDate(new Date(Number(e.target.value), month, 1));
-  };
+  const daysInMonth = new Date(selectedYear, selectedMonth + 1, 0).getDate();
+  const firstDayIndex = new Date(selectedYear, selectedMonth, 1).getDay();
+  const yearOptions = Array.from({ length: 7 }, (_, i) => 2024 + i);
 
-  const todayStr = new Date().toISOString().split('T')[0];
-  const upcomingBookings = bookings
-    .filter((b) => b.date >= todayStr)
-    .sort((a, b) => a.date.localeCompare(b.date))
-    .slice(0, 5);
+  const isDark = theme === 'dark';
+  const themeStyles = {
+    bg: isDark ? '#0f172a' : '#f1f5f9',
+    text: isDark ? '#f8fafc' : '#0f172a',
+    cardBg: isDark ? '#1e293b' : '#ffffff',
+    border: isDark ? '#334155' : '#e2e8f0',
+    inputBg: isDark ? '#0f172a' : '#ffffff',
+    inputText: isDark ? '#ffffff' : '#0f172a',
+    subText: isDark ? '#94a3b8' : '#64748b',
+    sectionBg: isDark ? '#1a2234' : '#f8fafc',
+  };
 
   return (
-    <div style={{ minHeight: '100vh', backgroundColor: '#121212', color: '#fff', padding: '20px', fontFamily: 'sans-serif' }}>
-      <div style={{ maxWidth: '650px', margin: 'auto' }}>
-        
-        {/* HEADER */}
-        <div style={{ textAlign: 'center', marginBottom: '20px', background: 'linear-gradient(135deg, #1e1e1e, #2a2a2a)', padding: '20px', borderRadius: '12px', border: '1px solid #333' }}>
-          <h1 style={{ margin: 0, color: '#4da6ff', fontSize: '26px' }}>PVR METRO VILLAGE</h1>
-          <p style={{ margin: '5px 0 0 0', color: '#aaa', fontSize: '14px' }}>Auditorium Booking Management System</p>
-        </div>
+    <div style={{ backgroundColor: themeStyles.bg, color: themeStyles.text, minHeight: '100vh', fontFamily: "'Segoe UI', sans-serif", paddingBottom: '70px' }}>
+      
+      {/* Top Header */}
+      <header style={{ position: 'sticky', top: 0, zIndex: 100, display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '14px 16px', backgroundColor: themeStyles.cardBg, borderBottom: `1px solid ${themeStyles.border}` }}>
+        <h3 style={{ margin: 0, color: '#10b981', fontSize: '18px', fontWeight: 'bold' }}>METRO GRAND</h3>
+        <button onClick={toggleTheme} style={{ padding: '6px 12px', borderRadius: '20px', border: `1px solid ${themeStyles.border}`, backgroundColor: themeStyles.inputBg, color: themeStyles.text, fontSize: '12px', fontWeight: 'bold' }}>
+          {isDark ? '☀️ Light' : '🌙 Dark'}
+        </button>
+      </header>
 
-        {/* STAFF MANAGEMENT PANEL */}
-        <div style={{ background: '#1e1e1e', padding: '15px', borderRadius: '12px', marginBottom: '20px', border: '1px solid #333' }}>
-          <h4 style={{ margin: '0 0 10px 0', color: '#ffc107' }}>👥 Authorized Staff Members</h4>
-          <form onSubmit={handleAddStaff} style={{ display: 'flex', gap: '8px', marginBottom: '12px' }}>
-            <input 
-              type="text" 
-              placeholder="Enter Staff Name" 
-              value={newStaffName} 
-              onChange={(e) => setNewStaffName(e.target.value)}
-              style={{ flex: 1, padding: '8px 12px', borderRadius: '5px', border: '1px solid #444', background: '#2a2a2a', color: '#fff' }}
-            />
-            <button type="submit" style={{ background: '#28a745', color: '#fff', border: 'none', padding: '8px 15px', borderRadius: '5px', cursor: 'pointer', fontWeight: 'bold' }}>
-              + Add Staff
-            </button>
-          </form>
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
-            {staffList.map((staff, idx) => (
-              <span key={idx} style={{ background: '#2a2a2a', border: '1px solid #4da6ff', padding: '5px 10px', borderRadius: '15px', fontSize: '13px', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                👤 {staff}
-                <button onClick={() => handleDeleteStaff(staff)} style={{ background: 'transparent', border: 'none', color: '#ff4d4d', cursor: 'pointer', fontWeight: 'bold', padding: 0 }}>✕</button>
-              </span>
-            ))}
-          </div>
-        </div>
-
-        {/* CALENDAR WITH MONTH & YEAR SELECTOR */}
-        <div style={{ background: '#1e1e1e', padding: '20px', borderRadius: '12px', marginBottom: '25px', border: '1px solid #333' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px', gap: '10px' }}>
-            <button onClick={() => setCurrentDate(new Date(year, month - 1, 1))} style={{ background: '#333', color: '#fff', border: 'none', padding: '8px 12px', borderRadius: '5px', cursor: 'pointer' }}>&lt; Prev</button>
-            
-            <div style={{ display: 'flex', gap: '8px' }}>
-              <select value={month} onChange={handleMonthChange} style={{ padding: '8px', borderRadius: '5px', background: '#2a2a2a', color: '#4da6ff', border: '1px solid #4da6ff', fontWeight: 'bold' }}>
-                {monthNames.map((m, idx) => (
-                  <option key={idx} value={idx}>{m}</option>
-                ))}
-              </select>
-
-              <select value={year} onChange={handleYearChange} style={{ padding: '8px', borderRadius: '5px', background: '#2a2a2a', color: '#4da6ff', border: '1px solid #4da6ff', fontWeight: 'bold' }}>
-                {yearList.map((y) => (
-                  <option key={y} value={y}>{y}</option>
-                ))}
-              </select>
-            </div>
-
-            <button onClick={() => setCurrentDate(new Date(year, month + 1, 1))} style={{ background: '#333', color: '#fff', border: 'none', padding: '8px 12px', borderRadius: '5px', cursor: 'pointer' }}>Next &gt;</button>
-          </div>
-
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: '5px', textAlign: 'center', fontWeight: 'bold', marginBottom: '10px', color: '#888' }}>
-            <div>Sun</div><div>Mon</div><div>Tue</div><div>Wed</div><div>Thu</div><div>Fri</div><div>Sat</div>
+      {/* 1. CALENDAR VIEW */}
+      {activeTab === 'calendar' && (
+        <main style={{ padding: '16px', maxWidth: '500px', margin: '0 auto' }}>
+          
+          <div style={{ display: 'flex', gap: '8px', marginBottom: '16px' }}>
+            <select value={selectedMonth} onChange={(e) => setSelectedMonth(Number(e.target.value))} style={{ flex: 1, padding: '10px', borderRadius: '8px', backgroundColor: themeStyles.cardBg, color: themeStyles.inputText, border: `1px solid ${themeStyles.border}`, fontWeight: 'bold' }}>
+              {MONTHS.map((m, idx) => <option key={m} value={idx}>{m}</option>)}
+            </select>
+            <select value={selectedYear} onChange={(e) => setSelectedYear(Number(e.target.value))} style={{ flex: 1, padding: '10px', borderRadius: '8px', backgroundColor: themeStyles.cardBg, color: themeStyles.inputText, border: `1px solid ${themeStyles.border}`, fontWeight: 'bold' }}>
+              {yearOptions.map(yr => <option key={yr} value={yr}>{yr}</option>)}
+            </select>
           </div>
 
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: '6px' }}>
-            {daysArray.map((day, idx) => {
-              if (!day) return <div key={idx} style={{ height: '55px' }}></div>;
-              const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-              const booking = getBookingForDate(dateStr);
-              let bgColor = '#2a2a2a';
-              let textColor = '#fff';
-
-              if (booking) {
-                if (booking.status === 'confirmed') bgColor = '#28a745';
-                else if (booking.status === 'enquiry') { bgColor = '#ffc107'; textColor = '#000'; }
-              }
-
+            {['S', 'M', 'T', 'W', 'T', 'F', 'S'].map((d, i) => (
+              <div key={i} style={{ textAlign: 'center', fontWeight: 'bold', color: themeStyles.subText, fontSize: '13px', padding: '4px' }}>{d}</div>
+            ))}
+            {Array(firstDayIndex).fill(null).map((_, i) => <div key={`empty-${i}`} />)}
+            {Array.from({ length: daysInMonth }, (_, i) => i + 1).map(day => {
+              const status = getStatusForDate(day);
               return (
-                <div key={idx} onClick={() => handleDateClick(day)} style={{ height: '55px', backgroundColor: bgColor, color: textColor, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', borderRadius: '6px', fontSize: '13px', cursor: 'pointer', border: '1px solid #333', padding: '2px' }}>
-                  <strong style={{ fontSize: '15px' }}>{day}</strong>
-                  {booking && <span style={{ fontSize: '9px', textAlign: 'center', overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis', maxWidth: '100%' }}>{booking.auditorium.replace('Metro Grand ', 'MG ')}</span>}
+                <div key={day} onClick={() => handleDateClick(day)} style={{
+                  aspectRatio: '1', borderRadius: '10px', padding: '4px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', cursor: 'pointer',
+                  backgroundColor: status === 'confirmed' ? '#059669' : status === 'enquiry' ? '#d97706' : themeStyles.cardBg,
+                  border: `1px solid ${themeStyles.border}`,
+                  color: status ? '#fff' : themeStyles.text
+                }}>
+                  <span style={{ fontWeight: 'bold', fontSize: '16px' }}>{day}</span>
+                  {status && <span style={{ fontSize: '8px', fontWeight: 'bold', textTransform: 'uppercase', marginTop: '2px' }}>●</span>}
                 </div>
               );
             })}
           </div>
-        </div>
 
-        {/* CLICKABLE UPCOMING FUNCTIONS */}
-        <div style={{ background: '#1e1e1e', padding: '20px', borderRadius: '12px', marginBottom: '25px', border: '1px solid #333' }}>
-          <h3 style={{ marginTop: 0, color: '#4da6ff', borderBottom: '1px solid #333', paddingBottom: '10px' }}>📅 Upcoming Functions (Click to view/edit)</h3>
-          {upcomingBookings.length === 0 ? (
-            <p style={{ color: '#888', fontStyle: 'italic' }}>No upcoming functions.</p>
-          ) : (
-            upcomingBookings.map((item, index) => (
-              <div 
-                key={index} 
-                onClick={() => openBookingDetails(item)}
-                style={{ background: '#2a2a2a', padding: '12px', borderRadius: '8px', marginBottom: '10px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer', border: '1px solid #444' }}
-              >
-                <div>
-                  <strong style={{ color: '#ffc107', display: 'block' }}>{item.date} ({item.time})</strong>
-                  <span style={{ fontSize: '15px', fontWeight: 'bold' }}>{item.auditorium}</span>
-                  <div style={{ fontSize: '12px', color: '#aaa', marginTop: '3px' }}>{item.notes}</div>
-                </div>
-                <button onClick={(e) => handleDeleteBooking(item.id, e)} style={{ background: '#dc3545', color: '#fff', border: 'none', padding: '6px 12px', borderRadius: '4px', cursor: 'pointer', fontSize: '12px', fontWeight: 'bold' }}>Delete</button>
-              </div>
-            ))
-          )}
-        </div>
+          <div style={{ display: 'flex', justifyContent: 'center', gap: '20px', marginTop: '20px', fontSize: '12px', color: themeStyles.subText }}>
+            <span>🟢 Confirmed</span>
+            <span>🟠 Enquiry</span>
+          </div>
+        </main>
+      )}
 
-        {/* FULL-SCREEN BOOKING INTERFACE */}
-        {showBookingModal && (
-          <div style={{ position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', background: '#121212', zIndex: 2000, overflowY: 'auto', padding: '20px', boxSizing: 'border-box' }}>
-            <div style={{ maxWidth: '700px', margin: 'auto', background: '#1e1e1e', padding: '25px', borderRadius: '12px', border: '1px solid #4da6ff' }}>
+      {/* 2. FULL SCREEN BOOKING FORM */}
+      {activeTab === 'booking_form' && (
+        <main style={{ padding: '16px', maxWidth: '500px', margin: '0 auto' }}>
+          <div style={{ backgroundColor: themeStyles.cardBg, borderRadius: '16px', padding: '16px', border: `1px solid ${themeStyles.border}` }}>
+            
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+              <h3 style={{ margin: 0, color: '#10b981' }}>New Booking</h3>
+              <button onClick={() => setActiveTab('calendar')} style={{ backgroundColor: themeStyles.subText, color: '#fff', border: 'none', padding: '6px 12px', borderRadius: '6px' }}>Cancel</button>
+            </div>
+
+            <form onSubmit={handleSaveBooking} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
               
-              {/* MODAL HEADER WITH ONLY CLOSE BUTTON */}
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', borderBottom: '1px solid #333', paddingBottom: '10px' }}>
-                <h2 style={{ margin: 0, color: '#4da6ff' }}>📌 Booking Form — Date: {date}</h2>
-                <button onClick={() => setShowBookingModal(false)} style={{ background: '#6c757d', color: '#fff', border: 'none', padding: '8px 14px', borderRadius: '5px', cursor: 'pointer', fontWeight: 'bold' }}>Close ✕</button>
+              <div>
+                <label style={{ fontSize: '12px', fontWeight: 'bold', display: 'block', marginBottom: '4px' }}>Select Facility</label>
+                <select value={formData.auditorium} onChange={handleAuditoriumChange} style={{ width: '100%', padding: '10px', borderRadius: '8px', border: `1px solid ${themeStyles.border}`, backgroundColor: themeStyles.inputBg, color: themeStyles.inputText }}>
+                  {Object.keys(AUDITORIUM_DATA).map(aud => <option key={aud} value={aud}>{aud}</option>)}
+                </select>
               </div>
 
-              <form onSubmit={handleBookingSubmit}>
+              <div style={{ backgroundColor: themeStyles.sectionBg, padding: '12px', borderRadius: '10px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                <span style={{ fontSize: '13px', fontWeight: 'bold', color: '#10b981' }}>Client Details</span>
+                <input type="text" placeholder="Full Name *" value={formData.clientName} onChange={e => setFormData({...formData, clientName: e.target.value})} style={{ padding: '10px', borderRadius: '6px', border: `1px solid ${themeStyles.border}`, backgroundColor: themeStyles.inputBg, color: themeStyles.inputText }} required />
+                <textarea placeholder="Address" value={formData.clientAddress} onChange={e => setFormData({...formData, clientAddress: e.target.value})} style={{ padding: '10px', borderRadius: '6px', border: `1px solid ${themeStyles.border}`, backgroundColor: themeStyles.inputBg, color: themeStyles.inputText }} rows="2" />
+                <input type="tel" placeholder="Contact Number *" value={formData.contactNumber} onChange={e => setFormData({...formData, contactNumber: e.target.value})} style={{ padding: '10px', borderRadius: '6px', border: `1px solid ${themeStyles.border}`, backgroundColor: themeStyles.inputBg, color: themeStyles.inputText }} required />
+              </div>
+
+              <div style={{ backgroundColor: themeStyles.sectionBg, padding: '12px', borderRadius: '10px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                <span style={{ fontSize: '13px', fontWeight: 'bold', color: '#10b981' }}>Date & Time</span>
+                <input type="date" value={formData.bookingDate} onChange={e => setFormData({...formData, bookingDate: e.target.value})} style={{ padding: '10px', borderRadius: '6px', border: `1px solid ${themeStyles.border}`, backgroundColor: themeStyles.inputBg, color: themeStyles.inputText }} required />
                 
-                {/* 1. Auditorium Selection */}
-                <div style={{ marginBottom: '15px' }}>
-                  <label style={{ display: 'block', marginBottom: '5px', fontWeight: 'bold' }}>1. Select Auditorium *</label>
-                  <select value={auditorium} onChange={(e) => setAuditorium(e.target.value)} style={{ width: '100%', padding: '12px', borderRadius: '6px', border: '1px solid #444', background: '#2a2a2a', color: '#fff' }}>
-                    {auditoriumList.map((item, index) => <option key={index} value={item}>{item}</option>)}
-                  </select>
-                </div>
-
-                {/* 2. Customer Details Section */}
-                <div style={{ background: '#262626', padding: '15px', borderRadius: '8px', marginBottom: '15px', border: '1px solid #333' }}>
-                  <h4 style={{ margin: '0 0 12px 0', color: '#ffc107' }}>👤 Booking & Customer Details</h4>
-                  
-                  <div style={{ marginBottom: '10px' }}>
-                    <label style={{ fontSize: '13px', display: 'block', marginBottom: '4px', color: '#4da6ff', fontWeight: 'bold' }}>Booking Staff Name *</label>
-                    <select 
-                      value={selectedStaff} 
-                      onChange={(e) => setSelectedStaff(e.target.value)} 
-                      style={{ width: '100%', padding: '10px', borderRadius: '5px', border: '1px solid #444', background: '#333', color: '#fff' }}
-                    >
-                      {staffList.map((staff, idx) => (
-                        <option key={idx} value={staff}>{staff}</option>
-                      ))}
-                    </select>
-                  </div>
-
-                  <div style={{ marginBottom: '10px' }}>
-                    <label style={{ fontSize: '13px', display: 'block', marginBottom: '4px' }}>Customer Name:</label>
-                    <input type="text" value={customerName} onChange={(e) => setCustomerName(e.target.value)} placeholder="Full Customer Name" required style={{ width: '100%', padding: '10px', borderRadius: '5px', border: '1px solid #444', background: '#333', color: '#fff', boxSizing: 'border-box' }} />
-                  </div>
-
-                  <div style={{ marginBottom: '10px' }}>
-                    <label style={{ fontSize: '13px', display: 'block', marginBottom: '4px' }}>Address:</label>
-                    <textarea value={address} onChange={(e) => setAddress(e.target.value)} placeholder="Customer Address" rows="2" style={{ width: '100%', padding: '10px', borderRadius: '5px', border: '1px solid #444', background: '#333', color: '#fff', boxSizing: 'border-box' }} />
-                  </div>
-
-                  <div style={{ display: 'flex', gap: '10px', marginBottom: '10px' }}>
-                    <div style={{ flex: 1 }}>
-                      <label style={{ fontSize: '13px', display: 'block', marginBottom: '4px' }}>Mobile Number *</label>
-                      <input type="tel" value={mobileNumber} onChange={(e) => setMobileNumber(e.target.value)} placeholder="10-digit Mobile" required style={{ width: '100%', padding: '10px', borderRadius: '5px', border: '1px solid #444', background: '#333', color: '#fff', boxSizing: 'border-box' }} />
-                    </div>
-                    <div style={{ flex: 1 }}>
-                      <label style={{ fontSize: '13px', display: 'block', marginBottom: '4px' }}>Alternate Mobile Number</label>
-                      <input type="tel" value={altMobileNumber} onChange={(e) => setAltMobileNumber(e.target.value)} placeholder="Alternate Mobile" style={{ width: '100%', padding: '10px', borderRadius: '5px', border: '1px solid #444', background: '#333', color: '#fff', boxSizing: 'border-box' }} />
-                    </div>
-                  </div>
-                </div>
-
-                {/* 3. Event Details */}
-                <div style={{ marginBottom: '15px' }}>
-                  <label style={{ display: 'block', marginBottom: '5px', fontWeight: 'bold' }}>Guest Count & Time Duration</label>
-                  <input type="number" value={guestCount} onChange={(e) => setGuestCount(e.target.value)} placeholder="Number of Guests" required style={{ width: '100%', padding: '10px', borderRadius: '5px', border: '1px solid #444', background: '#2a2a2a', color: '#fff', marginBottom: '10px', boxSizing: 'border-box' }} />
-                  <div style={{ display: 'flex', gap: '10px' }}>
-                    <div style={{ flex: 1 }}>
-                      <span style={{ fontSize: '12px', color: '#aaa' }}>From:</span>
-                      <input type="time" value={startTime} onChange={(e) => setStartTime(e.target.value)} required style={{ width: '100%', padding: '8px', borderRadius: '5px', border: '1px solid #444', background: '#2a2a2a', color: '#fff' }} />
-                    </div>
-                    <div style={{ flex: 1 }}>
-                      <span style={{ fontSize: '12px', color: '#aaa' }}>To:</span>
-                      <input type="time" value={endTime} onChange={(e) => setEndTime(e.target.value)} required style={{ width: '100%', padding: '8px', borderRadius: '5px', border: '1px solid #444', background: '#2a2a2a', color: '#fff' }} />
-                    </div>
-                  </div>
-                </div>
-
-                {/* 4. FINANCIAL SUMMARY SECTION */}
-                <div style={{ background: '#262626', padding: '15px', borderRadius: '8px', marginBottom: '15px', border: '1px solid #444' }}>
-                  <h4 style={{ margin: '0 0 10px 0', color: '#ffc107' }}>📊 Financial Summary</h4>
-                  
-                  <div style={{ marginBottom: '10px' }}>
-                    <label style={{ fontSize: '13px' }}>Hall Rent (₹):</label>
-                    <input type="number" value={hallRent} onChange={(e) => setHallRent(e.target.value)} style={{ width: '100%', padding: '8px', borderRadius: '4px', border: '1px solid #444', background: '#333', color: '#fff', boxSizing: 'border-box' }} />
-                  </div>
-
-                  <div style={{ marginBottom: '10px' }}>
-                    <label style={{ fontSize: '13px' }}>AC Usage (Hours @ ₹3000/hr):</label>
-                    <input type="number" step="0.5" value={acHours} onChange={(e) => setAcHours(e.target.value)} style={{ width: '100%', padding: '8px', borderRadius: '4px', border: '1px solid #444', background: '#333', color: '#fff', boxSizing: 'border-box' }} />
-                  </div>
-
-                  <div style={{ marginBottom: '10px' }}>
-                    <label style={{ fontSize: '13px' }}>Cleaning Charge (₹):</label>
-                    <input type="number" value={cleaningCharge} onChange={(e) => setCleaningCharge(e.target.value)} style={{ width: '100%', padding: '8px', borderRadius: '4px', border: '1px solid #444', background: '#333', color: '#fff', boxSizing: 'border-box' }} />
-                  </div>
-
-                  <div style={{ marginBottom: '10px' }}>
-                    <label style={{ fontSize: '13px' }}>Advance Received (₹):</label>
-                    <input type="number" value={advanceReceived} onChange={(e) => setAdvanceReceived(e.target.value)} style={{ width: '100%', padding: '8px', borderRadius: '4px', border: '1px solid #444', background: '#333', color: '#fff', boxSizing: 'border-box' }} />
-                  </div>
-
-                  <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 'bold', marginTop: '10px', color: '#fff' }}>
-                    <span>Grand Total: ₹{totalAmount}</span>
-                    <span style={{ color: '#28a745' }}>Balance: ₹{balanceAmount}</span>
-                  </div>
-                </div>
-
-                {/* Status & Remarks */}
-                <div style={{ marginBottom: '12px' }}>
-                  <label style={{ display: 'block', marginBottom: '5px' }}>Booking Status:</label>
-                  <select value={status} onChange={(e) => setStatus(e.target.value)} style={{ width: '100%', padding: '10px', borderRadius: '5px', border: '1px solid #444', background: '#2a2a2a', color: '#fff' }}>
-                    <option value="confirmed">Confirmed (Green 🟢)</option>
-                    <option value="enquiry">Enquiry (Yellow 🟡)</option>
-                  </select>
-                </div>
-
-                <div style={{ marginBottom: '20px' }}>
-                  <label style={{ display: 'block', marginBottom: '5px' }}>Remarks:</label>
-                  <textarea value={remarks} onChange={(e) => setRemarks(e.target.value)} placeholder="Additional notes..." style={{ width: '100%', padding: '10px', borderRadius: '5px', border: '1px solid #444', background: '#2a2a2a', color: '#fff', boxSizing: 'border-box', height: '60px' }} />
-                </div>
-
-                {/* UPDATED ACTION BUTTONS AT BOTTOM */}
                 <div style={{ display: 'flex', gap: '10px' }}>
-                  <button type="submit" style={{ flex: 1, padding: '14px', background: '#28a745', color: '#fff', border: 'none', borderRadius: '6px', fontWeight: 'bold', cursor: 'pointer', fontSize: '16px' }}>
-                    {selectedBookingId ? 'Update Booking' : 'Save Booking'}
-                  </button>
-                  
-                  {selectedBookingId && (
-                    <button type="button" onClick={(e) => handleDeleteBooking(selectedBookingId, e)} style={{ padding: '14px 20px', background: '#dc3545', color: '#fff', border: 'none', borderRadius: '6px', fontWeight: 'bold', cursor: 'pointer', fontSize: '15px' }}>
-                      🗑️ Delete Booking
-                    </button>
+                  <input type="time" value={formData.startTime} onChange={e => setFormData({...formData, startTime: e.target.value})} style={{ flex: 1, padding: '8px', borderRadius: '6px', border: `1px solid ${themeStyles.border}`, backgroundColor: themeStyles.inputBg, color: themeStyles.inputText }} required />
+                  <input type="time" value={formData.endTime} onChange={e => setFormData({...formData, endTime: e.target.value})} style={{ flex: 1, padding: '8px', borderRadius: '6px', border: `1px solid ${themeStyles.border}`, backgroundColor: themeStyles.inputBg, color: themeStyles.inputText }} required />
+                </div>
+              </div>
+
+              <div style={{ backgroundColor: themeStyles.sectionBg, padding: '12px', borderRadius: '10px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                <span style={{ fontSize: '13px', fontWeight: 'bold', color: '#10b981' }}>Payment</span>
+                
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <label style={{ fontSize: '13px' }}>Base Rent (₹):</label>
+                  <input type="number" value={formData.baseRent} onChange={e => setFormData({...formData, baseRent: Number(e.target.value)})} style={{ width: '110px', padding: '6px', borderRadius: '6px', border: `1px solid ${themeStyles.border}`, backgroundColor: themeStyles.inputBg, color: themeStyles.inputText }} />
+                </div>
+
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <label style={{ fontSize: '13px' }}>Discount (₹):</label>
+                  <input type="number" value={formData.rentDiscount} onChange={e => setFormData({...formData, rentDiscount: Number(e.target.value)})} style={{ width: '110px', padding: '6px', borderRadius: '6px', border: `1px solid ${themeStyles.border}`, backgroundColor: themeStyles.inputBg, color: themeStyles.inputText }} />
+                </div>
+
+                <div style={{ backgroundColor: isDark ? '#143823' : '#e8f5e9', padding: '10px', borderRadius: '8px' }}>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '13px', fontWeight: 'bold' }}>
+                    <input type="checkbox" checked={formData.includeAC} onChange={e => setFormData({...formData, includeAC: e.target.checked})} />
+                    Include AC Charge (Auto: ₹{formData.acCharge})
+                  </label>
+                  {formData.includeAC && (
+                    <div style={{ marginTop: '8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <span style={{ fontSize: '12px' }}>Edit AC Charge:</span>
+                      <input type="number" value={formData.acCharge} onChange={e => setFormData({...formData, acCharge: Number(e.target.value)})} style={{ width: '100px', padding: '4px', borderRadius: '4px', border: `1px solid ${themeStyles.border}`, backgroundColor: themeStyles.inputBg, color: themeStyles.inputText }} />
+                    </div>
                   )}
                 </div>
+              </div>
 
-              </form>
-            </div>
+              <div style={{ backgroundColor: '#10b981', color: '#fff', padding: '12px 16px', borderRadius: '10px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span style={{ fontSize: '14px', fontWeight: 'bold' }}>Total Payable:</span>
+                <span style={{ fontSize: '20px', fontWeight: 'bold' }}>₹{totalPayable}</span>
+              </div>
+
+              <select value={formData.status} onChange={e => setFormData({...formData, status: e.target.value})} style={{ padding: '10px', borderRadius: '8px', border: `1px solid ${themeStyles.border}`, backgroundColor: themeStyles.inputBg, color: themeStyles.inputText }}>
+                <option value="confirmed">Confirm Reservation</option>
+                <option value="enquiry">Save as Enquiry</option>
+              </select>
+
+              <button type="submit" style={{ padding: '14px', backgroundColor: '#10b981', color: '#fff', border: 'none', borderRadius: '10px', fontWeight: 'bold', fontSize: '16px', marginTop: '6px' }}>
+                Save Booking
+              </button>
+
+            </form>
           </div>
-        )}
+        </main>
+      )}
 
-        {message && <p style={{ marginTop: '20px', fontWeight: 'bold', textAlign: 'center', color: '#4da6ff' }}>{message}</p>}
-      </div>
+      {/* 3. BOOKINGS LIST */}
+      {activeTab === 'events' && (
+        <main style={{ padding: '16px', maxWidth: '500px', margin: '0 auto' }}>
+          <h3 style={{ margin: '0 0 12px 0', color: '#10b981' }}>Booked Events</h3>
+          {bookings.map(b => (
+            <div key={b.id || b._id} style={{ padding: '14px', marginBottom: '10px', backgroundColor: themeStyles.cardBg, borderRadius: '10px', borderLeft: `5px solid ${b.status === 'confirmed' ? '#10b981' : '#f59e0b'}` }}>
+              <h4 style={{ margin: '0 0 4px 0' }}>{b.auditorium}</h4>
+              <p style={{ margin: '2px 0', fontSize: '13px' }}><strong>Date:</strong> {b.booking_date || b.date} ({b.time})</p>
+              <p style={{ margin: '6px 0 0 0', opacity: 0.8, fontSize: '12px' }}>{b.notes}</p>
+            </div>
+          ))}
+        </main>
+      )}
+
+      {/* Mobile Bottom Navigation Bar */}
+      <nav style={{ position: 'fixed', bottom: 0, left: 0, right: 0, height: '60px', backgroundColor: themeStyles.cardBg, borderTop: `1px solid ${themeStyles.border}`, display: 'flex', justifyContent: 'space-around', alignItems: 'center', zIndex: 100 }}>
+        <button onClick={() => setActiveTab('calendar')} style={{ background: 'none', border: 'none', color: activeTab === 'calendar' ? '#10b981' : themeStyles.subText, fontWeight: 'bold', fontSize: '13px' }}>
+          📅 Calendar
+        </button>
+        <button onClick={() => setActiveTab('events')} style={{ background: 'none', border: 'none', color: activeTab === 'events' ? '#10b981' : themeStyles.subText, fontWeight: 'bold', fontSize: '13px' }}>
+          📋 Bookings
+        </button>
+      </nav>
+
     </div>
   );
 }
